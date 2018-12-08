@@ -11,3 +11,4 @@ results/
 testcases
 src/parse
 .idea
+/ast/
