@@ -7,24 +7,19 @@ import java.io.*;
 
 public class VM2M {
 
-  public static void main(String[] args) {
-    try {
-      FileInputStream fs = new FileInputStream(
-            "/Users/ari/Desktop/cs132/testcases/hw5/BinaryTree.vaporm"
-      );
-      VaporProgram programAST = parseVapor(fs, System.out);
+  public static void main(String[] args) throws Exception {
+    FileInputStream fs = new FileInputStream(
+          "/Users/ari/Desktop/cs132/testcases/hw5/BinaryTree.vaporm"
+    );
+    VaporProgram programAST = parseVapor(fs, System.out);
+    if (programAST == null) {throw new RuntimeException();}
 
-      compile_programStart(programAST);
-      for (VFunction func : programAST.functions) {
-        FunctionVisitor v = new FunctionVisitor(func);
-        v.visit();
-      }
-      compile_programEnd();
-
-    } catch (IOException e) {
-      System.out.println("AST parse error:");
-      System.out.println(e);
+    compile_programStart(programAST);
+    for (VFunction func : programAST.functions) {
+      FunctionVisitor v = new FunctionVisitor(func);
+      v.compileFunction();
     }
+    compile_programEnd();
   }
 
   private static void compile_programStart(VaporProgram programAST) {

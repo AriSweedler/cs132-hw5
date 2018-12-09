@@ -10,7 +10,7 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
     indentDepth = 0;
   }
 
-  public void visit() {
+  public void compileFunction() {
     int itemsOnStack = (myFunc.stack.local + myFunc.stack.out);
     /* we also place the "return addr" & "old value of $fp" onto the stack */
     itemsOnStack += 2;
@@ -21,10 +21,10 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
     compile(myFunc.ident + ":");
     indentDepth++;
     compile_functionStart(stackSize);
-    for (VInstr instr: myFunc.body) {
+    for (VInstr instr : myFunc.body) {
       instr.accept(this);
       /* label printing */
-      compile_labels(instr.sourcePos.line);
+      compile_labels(instr.sourcePos.line + 1);
     }
     compile_functionEnd(stackSize);
     System.out.println();
@@ -34,7 +34,7 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
     for (VCodeLabel l : myFunc.labels) {
       if (targetLine == l.sourcePos.line) {
         compile(l.ident + ":");
-        compile_labels(targetLine+1);
+        compile_labels(targetLine + 1);
       }
     }
   }
@@ -72,7 +72,7 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
 
   private void compileHeapAllocZ(VBuiltIn a) {
     if (a.args[0] instanceof VLitInt) {
-      compile("li $a0 " + ((VLitInt)a.args[0]).value);
+      compile("li $a0 " + ((VLitInt) a.args[0]).value);
     } else {
       compile("ERROR compileHeapAllocZ not a Lit Int? what is is..." + a.args[0].getClass());
     }
@@ -85,8 +85,8 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
 
   private void compile_PrintIntS(VBuiltIn a) {
     if (a.args[0] instanceof VLitInt) {
-      compile("li $a0 " + ((VLitInt)a.args[0]).value);
-    } else if (a.args[0] instanceof  VVarRef) {
+      compile("li $a0 " + ((VLitInt) a.args[0]).value);
+    } else if (a.args[0] instanceof VVarRef) {
       compile("move $a0 " + a.args[0]);
     } else {
       compile("ERROR compile_PrintIntS not a Lit Int  or VVarRef? what is is..." + a.args[0].getClass());
@@ -95,7 +95,7 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
   }
 
   private void compile(String s) {
-    for(int i = 0; i < indentDepth*2; i++) {
+    for (int i = 0; i < indentDepth * 2; i++) {
       System.out.print(' ');
     }
     System.out.println(s);
@@ -105,7 +105,7 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
   public void visit(VAssign a) {
     /* An assignment instruction. This is only used for assignments of simple operands to registers */
     if (a.source instanceof VLitInt) {
-      compile("li " + a.dest + " " + ((VLitInt)a.source).value);
+      compile("li " + a.dest + " " + ((VLitInt) a.source).value);
     } else if (a.source instanceof VVarRef) {
       compile("move " + a.dest + " " + a.source);
     } else {
@@ -119,7 +119,7 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
     /* args are on out stack/registers - vaporM takes care of all this*/
     /* We just need to do the jalr */
     if (a.addr instanceof VAddr.Label) {
-      compile("jalr " + ((VAddr.Label)a.addr).label);
+      compile("jalr " + ((VAddr.Label) a.addr).label);
     } else if (a.addr instanceof VAddr.Var) {
       compile("jalr " + a.addr);
     } else {
@@ -139,31 +139,33 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
     else if (a.op == VBuiltIn.Op.PrintIntS) compile_PrintIntS(a);
     else if (a.op == VBuiltIn.Op.HeapAllocZ) compileHeapAllocZ(a);
     else if (a.op == VBuiltIn.Op.Error) compileError(a);
-    else compile("ERROR VBuiltIn not a recognized operation. It is: " +  a.op.toString());
+    else compile("ERROR VBuiltIn not a recognized operation. It is: " + a.op.toString());
   }
 
   @Override
   public void visit(VMemWrite vMemWrite) throws RuntimeException {
-      compile("    TODO VMemWrite TODO");
+    compile("    TODO VMemWrite TODO");
   }
 
   @Override
   public void visit(VMemRead vMemRead) throws RuntimeException {
-      compile("    TODO VMemRead TODO");
+    compile("    TODO VMemRead TODO");
   }
 
   @Override
   public void visit(VBranch vBranch) throws RuntimeException {
-      compile("    TODO VBranch TODO");
+    compile("    TODO VBranch TODO");
   }
 
   @Override
-  public void visit(VGoto vGoto) throws RuntimeException {
-      compile("    TODO VGoto TODO");
+  public void visit(VGoto a) throws RuntimeException {
+    /*  goto :if1_end  */
+    /*  j if1_end */
+    compile("j " + a.target.toString().substring(1));
   }
 
   @Override
   public void visit(VReturn vReturn) throws RuntimeException {
-      compile("    TODO VReturn TODO");
+    compile("    TODO VReturn TODO");
   }
 }
