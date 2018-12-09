@@ -104,6 +104,41 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
     System.out.println(s);
   }
 
+  private String get_memGlobal(VMemRef.Global g) {
+    int byteOffset = g.byteOffset;
+    String ans = null;
+    if (g.base instanceof VAddr.Label) {
+      ans = String.format("%d(%s)", byteOffset, ((VAddr.Label<VDataSegment>) g.base).label);
+    } else if (g.base instanceof VAddr.Var) {
+      ans = String.format("%d(%s)", byteOffset, ((VAddr.Var<VDataSegment>) g.base).var);
+    }
+    return ans;
+  }
+
+  private String get_memStack(VMemRef.Stack s) {
+    int aboveSP, aboveFP;
+    String ans = null;
+    switch (s.region) {
+      case In:
+        aboveFP = (s.index)*4;
+        ans = String.format("%d($fp)", aboveFP);
+        break;
+      case Local:
+        aboveSP = (myFunc.stack.out + s.index)*4;
+        ans = String.format("%d($sp)", aboveSP);
+        break;
+      case Out:
+        aboveSP = (s.index)*4;
+        ans = String.format("%d($sp)", aboveSP);
+        break;
+      default:
+        compile("ERROR memStack region. It is: " + s.region);
+        System.exit(1);
+        break;
+    }
+    return ans;
+  }
+
   @Override
   public void visit(VAssign a) {
     /* An assignment instruction. This is only used for assignments of simple operands to registers */
@@ -163,43 +198,22 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
       src = "$t9";
       compile("la " + src + " " + ((VLabelRef)(a.source)).ident);
     } else if (a.source instanceof VLitInt) {
-      src = "" + ((VLitInt) a.source).value;
+      compile("li $t9 " + ((VLitInt) a.source).value);
+      src = "$t9";
     } else {
       compile("ERROR VMemWrite source. It is: " + a.source.toString());
       System.exit(1);
     }
 
     String dest = null;
+    /*  a.dest is a VMemRef */
     if (a.dest instanceof VMemRef.Global) {
       VMemRef.Global g = ((VMemRef.Global) a.dest);
-      int byteOffset = g.byteOffset;
-      if (g.base instanceof VAddr.Label) {
-        dest = String.format("%d(%s)", byteOffset, ((VAddr.Label<VDataSegment>) g.base).label);
-      } else if (g.base instanceof VAddr.Var) {
-        dest = String.format("%d(%s)", byteOffset, ((VAddr.Var<VDataSegment>) g.base).var);
-      }
+      dest = get_memGlobal(g);
     } else if (a.dest instanceof VMemRef.Stack) {
       /* local[0] = $s0 * --> * sw $s0 0($sp) */
       VMemRef.Stack s = ((VMemRef.Stack)a.dest);
-      int aboveSP, aboveFP;
-      switch (s.region) {
-        case In:
-          aboveFP = (s.index)*4;
-          dest = String.format("%d($fp)", aboveFP);
-          break;
-        case Local:
-          aboveSP = (myFunc.stack.out + s.index)*4;
-          dest = String.format("%d($sp)", aboveSP);
-          break;
-        case Out:
-          aboveSP = (s.index)*4;
-          dest = String.format("%d($sp)", aboveSP);
-          break;
-        default:
-          compile("ERROR VMemWrite dest Stack region. It is: " + s.region);
-          System.exit(1);
-          break;
-      }
+      dest = get_memStack(s);
     }
 
     compile("sw " + src + " " + dest);
@@ -207,8 +221,26 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
 
   @Override
   public void visit(VMemRead a) throws RuntimeException {
-    compile("    TODO VMemRead TODO");
-    compile(a.toString());
+    /* $t1 = [$t0] * --> * lw $t1 0($t0) */
+    String dest = null;
+    if (a.dest instanceof VVarRef.Register) {
+      dest = ((VVarRef.Register) a.dest).toString();
+    } else {
+      compile("ERROR VMemRead dest not a register. It is: " + a.source.toString());
+      System.exit(1);
+    }
+
+    String src = null;
+    /* a.src is a VMemRef */
+    if (a.source instanceof VMemRef.Global) {
+      VMemRef.Global g = ((VMemRef.Global) a.source);
+      src = get_memGlobal(g);
+    } else if (a.source instanceof VMemRef.Stack) {
+      VMemRef.Stack s = ((VMemRef.Stack)a.source);
+      src = get_memStack(s);
+    }
+
+    compile("lw " + dest + " " + src);
   }
 
   @Override

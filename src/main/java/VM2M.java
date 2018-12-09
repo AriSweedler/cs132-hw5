@@ -8,10 +8,11 @@ import java.io.*;
 public class VM2M {
 
   public static void main(String[] args) throws Exception {
-    FileInputStream fs = new FileInputStream(
-          "/Users/ari/Desktop/cs132/testcases/hw5/BinaryTree.vaporm"
-    );
-    VaporProgram programAST = parseVapor(fs, System.out);
+//    FileInputStream fs = new FileInputStream(
+//          "/Users/ari/Desktop/cs132/testcases/hw5/MoreThan4.vaporm"
+//    );
+//    VaporProgram programAST = parseVapor(fs, System.out);
+    VaporProgram programAST = parseVapor(System.in, System.out);
     if (programAST == null) {throw new RuntimeException();}
 
     compile_programStart(programAST);
