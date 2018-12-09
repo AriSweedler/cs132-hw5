@@ -88,9 +88,13 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
 
   private void compile_Add(VBuiltIn a) {
     if (a.args[0] instanceof VLitInt && a.args[1] instanceof VLitInt) {
-      int ans = ((VLitInt)(a.args[0])).value + ((VLitInt)(a.args[1])).value;
+      /* optimize out the operation if both args are LitInts*/
+      int lhs = ((VLitInt)(a.args[0])).value;
+      int rhs = ((VLitInt)(a.args[1])).value;
+      int ans =  lhs + rhs;
       compile("li " + a.dest + " " + ans);
-    } if (a.args[0] instanceof VLitInt) {
+    } else if (a.args[0] instanceof VLitInt) {
+      /* Reorder operations to make only the last one a LitInt */
       compile("addu " + a.dest + " " + a.args[1] + " " + a.args[0]);
     } else {
       compile("addu " + a.dest + " " + a.args[0] + " " + a.args[1]);
@@ -99,10 +103,23 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
 
   private void compile_Sub(VBuiltIn a) {
     if (a.args[0] instanceof VLitInt && a.args[1] instanceof VLitInt) {
-      int ans = ((VLitInt)(a.args[0])).value - ((VLitInt)(a.args[1])).value;
+      /*  optimize out the operation if both args are LitInts*/
+      int lhs = ((VLitInt)(a.args[0])).value;
+      int rhs = ((VLitInt)(a.args[1])).value;
+      int ans =  lhs - rhs;
       compile("li " + a.dest + " " + ans);
-    } if (a.args[0] instanceof VLitInt) {
-      compile("subu " + a.dest + " " + a.args[1] + " " + a.args[0]);
+    } else if (a.args[0] instanceof VLitInt) {
+      /* Place lhs LitInt into a register */
+      String reg = "$t9";
+      int lhs = ((VLitInt)(a.args[0])).value;
+      compile("li " + reg + " " + lhs);
+      compile("subu " + a.dest + " " + reg + " " + a.args[1]);
+    } else if (a.args[1] instanceof VLitInt) {
+      /* Place rhs LitInt into a register */
+      String reg = "$t9";
+      int rhs = ((VLitInt)(a.args[1])).value;
+      compile("li " + reg + " " + rhs);
+      compile("subu " + a.dest + " " + a.args[0] + " " + reg);
     } else {
       compile("subu " + a.dest + " " + a.args[0] + " " + a.args[1]);
     }
@@ -110,47 +127,71 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
 
   private void compile_MulS(VBuiltIn a) {
     if (a.args[0] instanceof VLitInt && a.args[1] instanceof VLitInt) {
-      int ans = ((VLitInt)(a.args[0])).value * ((VLitInt)(a.args[1])).value;
+      /*  optimize out the operation if both args are LitInts*/
+      int lhs = ((VLitInt)(a.args[0])).value;
+      int rhs = ((VLitInt)(a.args[1])).value;
+      int ans =  (lhs * rhs); /* Java automatically truncates to 32 bits */
       compile("li " + a.dest + " " + ans);
-    } if (a.args[0] instanceof VLitInt) {
-      compile("mul " + a.dest + " " + a.args[1] + " " + a.args[0]);
+    } else if (a.args[0] instanceof VLitInt) {
+      /* Place lhs LitInt into a register */
+      String reg = "$t9";
+      int lhs = ((VLitInt)(a.args[0])).value;
+      compile("li " + reg + " " + lhs);
+      compile("mult " + reg + " " + a.args[1]);
+    } else if (a.args[1] instanceof VLitInt) {
+      /* Place rhs LitInt into a register */
+      String reg = "$t9";
+      int rhs = ((VLitInt)(a.args[1])).value;
+      compile("li " + reg + " " + rhs);
+      compile("mult " + a.args[0] + " " + reg);
     } else {
-      compile("mul " + a.dest + " " + a.args[0] + " " + a.args[1]);
+      compile("mult " + a.args[0] + " " + a.args[1]);
     }
+    compile("mflo " + a.dest);
   }
 
   private void compile_Eq(VBuiltIn a) {
     if (a.args[0] instanceof VLitInt && a.args[1] instanceof VLitInt) {
-      boolean ans = ((VLitInt)(a.args[0])).value == ((VLitInt)(a.args[1])).value;
+      /*  optimize out the operation if both args are LitInts*/
+      int lhs = ((VLitInt)(a.args[0])).value;
+      int rhs = ((VLitInt)(a.args[1])).value;
+      String ans = (lhs == rhs) ? "1" : "0";
       compile("li " + a.dest + " " + ans);
-    } if (a.args[0] instanceof VLitInt) {
-      compile("eq " + a.dest + " " + a.args[1] + " " + a.args[0]);
+    } else if (a.args[0] instanceof VLitInt) {
+      /* Place lhs LitInt into a register */
+      String reg = "$t9";
+      int lhs = ((VLitInt)(a.args[0])).value;
+      compile("li " + reg + " " + lhs);
+      compile("eq " + reg + " " + a.args[1]);
+    } else if (a.args[1] instanceof VLitInt) {
+      /* Place rhs LitInt into a register */
+      String reg = "$t9";
+      int rhs = ((VLitInt)(a.args[1])).value;
+      compile("li " + reg + " " + rhs);
+      compile("eq " + a.args[0] + " " + reg);
     } else {
-      compile("eq " + a.dest + " " + a.args[0] + " " + a.args[1]);
+      compile("eq " + a.args[0] + " " + a.args[1]);
     }
   }
 
-  private void compile_Lt(VBuiltIn a) {
+  private void compile_Lt(VBuiltIn a, String unsigned) {
     if (a.args[0] instanceof VLitInt && a.args[1] instanceof VLitInt) {
-      boolean ans_ = ((VLitInt)(a.args[0])).value < ((VLitInt)(a.args[1])).value;
-      String ans = ans_?"1":"0";
+      int lhs = ((VLitInt)(a.args[0])).value;
+      int rhs = ((VLitInt)(a.args[1])).value;
+      String ans = (lhs < rhs) ? "1" : "0";
       compile("li " + a.dest + " " + ans);
-    } if (a.args[0] instanceof VLitInt) {
-      compile("sltu " + a.dest + " " + a.args[1] + " " + a.args[0]);
+    } else if (a.args[0] instanceof VLitInt) {
+      /* Place lhs LitInt into a register */
+      String reg = "$t9";
+      int lhs = ((VLitInt)(a.args[0])).value;
+      compile("li " + reg + " " + lhs);
+      compile("slt" + unsigned + " " + a.dest + " " + reg + " " + a.args[1]);
+    } else if (a.args[1] instanceof VLitInt) {
+      /* Use the lt immediate comparison insn */
+      int rhs = ((VLitInt)(a.args[1])).value;
+      compile("slti" + unsigned + " " + a.dest + " " + a.args[0] + " " + rhs);
     } else {
-      compile("sltu " + a.dest + " " + a.args[0] + " " + a.args[1]);
-    }
-  }
-
-  private void compile_LtS(VBuiltIn a) {
-    if (a.args[0] instanceof VLitInt && a.args[1] instanceof VLitInt) {
-      boolean ans_ = ((VLitInt)(a.args[0])).value < ((VLitInt)(a.args[1])).value;
-      String ans = ans_?"1":"0";
-      compile("li " + a.dest + " " + ans);
-    } if (a.args[0] instanceof VLitInt) {
-      compile("slt " + a.dest + " " + a.args[1] + " " + a.args[0]);
-    } else {
-      compile("slt " + a.dest + " " + a.args[0] + " " + a.args[1]);
+      compile("slt" + unsigned + " " + a.dest + " " + a.args[0] + " " + a.args[1]);
     }
   }
 
@@ -246,8 +287,8 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
     else if (a.op == VBuiltIn.Op.Sub) compile_Sub(a);
     else if (a.op == VBuiltIn.Op.MulS) compile_MulS(a);
     else if (a.op == VBuiltIn.Op.Eq) compile_Eq(a);
-    else if (a.op == VBuiltIn.Op.Lt) compile_Lt(a);
-    else if (a.op == VBuiltIn.Op.LtS) compile_LtS(a);
+    else if (a.op == VBuiltIn.Op.Lt) compile_Lt(a, "");
+    else if (a.op == VBuiltIn.Op.LtS) compile_Lt(a,  "u");
     else if (a.op == VBuiltIn.Op.PrintIntS) compile_PrintIntS(a);
     else if (a.op == VBuiltIn.Op.HeapAllocZ) compile_HeapAllocZ(a);
     else if (a.op == VBuiltIn.Op.Error) compile_Error(a);
@@ -348,8 +389,7 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
 
   @Override
   public void visit(VReturn a) throws RuntimeException {
-    /* endFunction boilerplate manages the stack frame portion of the 'ret' call */
-    /* all we need to do is jump our instruction pointer to the return addr */
-    compile("jr $ra");
+    /* endFunction boilerplate manages the portion of the 'ret' call */
+    return;
   }
 }
