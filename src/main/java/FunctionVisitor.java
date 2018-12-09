@@ -55,7 +55,7 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
     System.out.printf(boilerplate, stackSize);
   }
 
-  private void compileError(VBuiltIn a) {
+  private void compile_Error(VBuiltIn a) {
     String err = a.args[0].toString();
     String preloadError;
     if (err.equals("\"null pointer\"")) {
@@ -70,19 +70,88 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
     compile("j _error");
   }
 
-  private void compileHeapAllocZ(VBuiltIn a) {
+  private void compile_HeapAllocZ(VBuiltIn a) {
+    String dest = null;
     if (a.args[0] instanceof VLitInt) {
       compile("li $a0 " + ((VLitInt) a.args[0]).value);
+      dest = a.dest.toString();
+    } else if (a.args[0] instanceof VVarRef.Register) {
+      compile("move $a0 " + a.args[0].toString());
+      dest = "$t1";
     } else {
-      compile("ERROR compileHeapAllocZ not a Lit Int? what is is..." + a.args[0].getClass());
+      compile("ERROR compile_HeapAllocZ not a Lit Int or a Register? what is is..." + a.args[0].getClass());
       System.exit(1);
     }
     compile("jal _heapAlloc");
-    compile("move " + a.dest + " $v0");
+    compile("move " + dest + " $v0");
   }
 
-  private void compile_EasyBuiltIn(VBuiltIn a, String opString) {
-    compile(opString + a.dest + " " + a.args[0] + " " + a.args[1]);
+  private void compile_Add(VBuiltIn a) {
+    if (a.args[0] instanceof VLitInt && a.args[1] instanceof VLitInt) {
+      int ans = ((VLitInt)(a.args[0])).value + ((VLitInt)(a.args[1])).value;
+      compile("li " + a.dest + " " + ans);
+    } if (a.args[0] instanceof VLitInt) {
+      compile("addu " + a.dest + " " + a.args[1] + " " + a.args[0]);
+    } else {
+      compile("addu " + a.dest + " " + a.args[0] + " " + a.args[1]);
+    }
+  }
+
+  private void compile_Sub(VBuiltIn a) {
+    if (a.args[0] instanceof VLitInt && a.args[1] instanceof VLitInt) {
+      int ans = ((VLitInt)(a.args[0])).value - ((VLitInt)(a.args[1])).value;
+      compile("li " + a.dest + " " + ans);
+    } if (a.args[0] instanceof VLitInt) {
+      compile("subu " + a.dest + " " + a.args[1] + " " + a.args[0]);
+    } else {
+      compile("subu " + a.dest + " " + a.args[0] + " " + a.args[1]);
+    }
+  }
+
+  private void compile_MulS(VBuiltIn a) {
+    if (a.args[0] instanceof VLitInt && a.args[1] instanceof VLitInt) {
+      int ans = ((VLitInt)(a.args[0])).value * ((VLitInt)(a.args[1])).value;
+      compile("li " + a.dest + " " + ans);
+    } if (a.args[0] instanceof VLitInt) {
+      compile("mul " + a.dest + " " + a.args[1] + " " + a.args[0]);
+    } else {
+      compile("mul " + a.dest + " " + a.args[0] + " " + a.args[1]);
+    }
+  }
+
+  private void compile_Eq(VBuiltIn a) {
+    if (a.args[0] instanceof VLitInt && a.args[1] instanceof VLitInt) {
+      boolean ans = ((VLitInt)(a.args[0])).value == ((VLitInt)(a.args[1])).value;
+      compile("li " + a.dest + " " + ans);
+    } if (a.args[0] instanceof VLitInt) {
+      compile("eq " + a.dest + " " + a.args[1] + " " + a.args[0]);
+    } else {
+      compile("eq " + a.dest + " " + a.args[0] + " " + a.args[1]);
+    }
+  }
+
+  private void compile_Lt(VBuiltIn a) {
+    if (a.args[0] instanceof VLitInt && a.args[1] instanceof VLitInt) {
+      boolean ans_ = ((VLitInt)(a.args[0])).value < ((VLitInt)(a.args[1])).value;
+      String ans = ans_?"1":"0";
+      compile("li " + a.dest + " " + ans);
+    } if (a.args[0] instanceof VLitInt) {
+      compile("sltu " + a.dest + " " + a.args[1] + " " + a.args[0]);
+    } else {
+      compile("sltu " + a.dest + " " + a.args[0] + " " + a.args[1]);
+    }
+  }
+
+  private void compile_LtS(VBuiltIn a) {
+    if (a.args[0] instanceof VLitInt && a.args[1] instanceof VLitInt) {
+      boolean ans_ = ((VLitInt)(a.args[0])).value < ((VLitInt)(a.args[1])).value;
+      String ans = ans_?"1":"0";
+      compile("li " + a.dest + " " + ans);
+    } if (a.args[0] instanceof VLitInt) {
+      compile("slt " + a.dest + " " + a.args[1] + " " + a.args[0]);
+    } else {
+      compile("slt " + a.dest + " " + a.args[0] + " " + a.args[1]);
+    }
   }
 
   private void compile_PrintIntS(VBuiltIn a) {
@@ -146,6 +215,8 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
       compile("li " + a.dest + " " + ((VLitInt) a.source).value);
     } else if (a.source instanceof VVarRef.Register) {
       compile("move " + a.dest + " " + a.source);
+    } else if (a.source instanceof VLabelRef) {
+
     } else {
       compile("ERROR VAssign not a Lit Int or a VVarRef.Register? what is is..." + a.source.getClass());
       System.exit(1);
@@ -159,7 +230,7 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
     /* args are on out stack/registers - vaporM takes care of all this*/
     /* We just need to do the jalr */
     if (a.addr instanceof VAddr.Label) {
-      compile("jalr " + ((VAddr.Label) a.addr).label);
+      compile("jal " + ((VAddr.Label) a.addr).label.toString().substring(1));
     } else if (a.addr instanceof VAddr.Var) {
       compile("jalr " + a.addr);
     } else {
@@ -171,16 +242,15 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
 
   @Override
   public void visit(VBuiltIn a) throws RuntimeException {
-    String opString = null;
-    if (a.op == VBuiltIn.Op.Add) compile_EasyBuiltIn(a, "addu ");
-    else if (a.op == VBuiltIn.Op.Sub) compile_EasyBuiltIn(a, "subu ");
-    else if (a.op == VBuiltIn.Op.MulS) compile_EasyBuiltIn(a, "mul ");
-    else if (a.op == VBuiltIn.Op.Eq) compile_EasyBuiltIn(a, "eq ");
-    else if (a.op == VBuiltIn.Op.Lt) compile_EasyBuiltIn(a, "lt ");
-    else if (a.op == VBuiltIn.Op.LtS) compile_EasyBuiltIn(a, "slt ");
+    if (a.op == VBuiltIn.Op.Add) compile_Add(a);
+    else if (a.op == VBuiltIn.Op.Sub) compile_Sub(a);
+    else if (a.op == VBuiltIn.Op.MulS) compile_MulS(a);
+    else if (a.op == VBuiltIn.Op.Eq) compile_Eq(a);
+    else if (a.op == VBuiltIn.Op.Lt) compile_Lt(a);
+    else if (a.op == VBuiltIn.Op.LtS) compile_LtS(a);
     else if (a.op == VBuiltIn.Op.PrintIntS) compile_PrintIntS(a);
-    else if (a.op == VBuiltIn.Op.HeapAllocZ) compileHeapAllocZ(a);
-    else if (a.op == VBuiltIn.Op.Error) compileError(a);
+    else if (a.op == VBuiltIn.Op.HeapAllocZ) compile_HeapAllocZ(a);
+    else if (a.op == VBuiltIn.Op.Error) compile_Error(a);
     else {
       compile("ERROR VBuiltIn not a recognized operation. It is: " + a.op.toString());
       System.exit(1);
