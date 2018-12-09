@@ -75,8 +75,10 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
       compile("li $a0 " + ((VLitInt) a.args[0]).value);
     } else {
       compile("ERROR compileHeapAllocZ not a Lit Int? what is is..." + a.args[0].getClass());
+      System.exit(1);
     }
     compile("jal _heapAlloc");
+    compile("move " + a.dest + " $v0");
   }
 
   private void compile_EasyBuiltIn(VBuiltIn a, String opString) {
@@ -86,10 +88,11 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
   private void compile_PrintIntS(VBuiltIn a) {
     if (a.args[0] instanceof VLitInt) {
       compile("li $a0 " + ((VLitInt) a.args[0]).value);
-    } else if (a.args[0] instanceof VVarRef) {
+    } else if (a.args[0] instanceof VVarRef.Register) {
       compile("move $a0 " + a.args[0]);
     } else {
-      compile("ERROR compile_PrintIntS not a Lit Int  or VVarRef? what is is..." + a.args[0].getClass());
+      compile("ERROR compile_PrintIntS not a Lit Int  or VVarRef.Register? what is is..." + a.args[0].getClass());
+      System.exit(1);
     }
     compile("jal _print");
   }
@@ -106,11 +109,13 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
     /* An assignment instruction. This is only used for assignments of simple operands to registers */
     if (a.source instanceof VLitInt) {
       compile("li " + a.dest + " " + ((VLitInt) a.source).value);
-    } else if (a.source instanceof VVarRef) {
+    } else if (a.source instanceof VVarRef.Register) {
       compile("move " + a.dest + " " + a.source);
     } else {
-      compile("ERROR VAssign not a Lit Int or a VVarRef? what is is..." + a.source.getClass());
+      compile("ERROR VAssign not a Lit Int or a VVarRef.Register? what is is..." + a.source.getClass());
+      System.exit(1);
     }
+
   }
 
   @Override
@@ -124,7 +129,9 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
       compile("jalr " + a.addr);
     } else {
       compile("ERROR VCall addr not a Label or a Var. What is it? " + a.addr.getClass());
+      System.exit(1);
     }
+
   }
 
   @Override
@@ -139,22 +146,95 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
     else if (a.op == VBuiltIn.Op.PrintIntS) compile_PrintIntS(a);
     else if (a.op == VBuiltIn.Op.HeapAllocZ) compileHeapAllocZ(a);
     else if (a.op == VBuiltIn.Op.Error) compileError(a);
-    else compile("ERROR VBuiltIn not a recognized operation. It is: " + a.op.toString());
+    else {
+      compile("ERROR VBuiltIn not a recognized operation. It is: " + a.op.toString());
+      System.exit(1);
+    }
   }
 
   @Override
-  public void visit(VMemWrite vMemWrite) throws RuntimeException {
-    compile("    TODO VMemWrite TODO");
+  public void visit(VMemWrite a) throws RuntimeException {
+    String src = null;
+    if (a.source instanceof VVarRef.Register) {
+      /* [$t0+4] = $t1 * --> * sw $t1 4($t0) */
+      src = ((VVarRef.Register)(a.source)).toString();
+    } else if (a.source instanceof VLabelRef) {
+      /* [$t0] = :vmt_BT *  --> * la $t9 vmt_BT; sw $t9 0($t0) */
+      src = "$t9";
+      compile("la " + src + " " + ((VLabelRef)(a.source)).ident);
+    } else if (a.source instanceof VLitInt) {
+      src = "" + ((VLitInt) a.source).value;
+    } else {
+      compile("ERROR VMemWrite source. It is: " + a.source.toString());
+      System.exit(1);
+    }
+
+    String dest = null;
+    if (a.dest instanceof VMemRef.Global) {
+      VMemRef.Global g = ((VMemRef.Global) a.dest);
+      int byteOffset = g.byteOffset;
+      if (g.base instanceof VAddr.Label) {
+        dest = String.format("%d(%s)", byteOffset, ((VAddr.Label<VDataSegment>) g.base).label);
+      } else if (g.base instanceof VAddr.Var) {
+        dest = String.format("%d(%s)", byteOffset, ((VAddr.Var<VDataSegment>) g.base).var);
+      }
+    } else if (a.dest instanceof VMemRef.Stack) {
+      /* local[0] = $s0 * --> * sw $s0 0($sp) */
+      VMemRef.Stack s = ((VMemRef.Stack)a.dest);
+      int aboveSP, aboveFP;
+      switch (s.region) {
+        case In:
+          aboveFP = (s.index)*4;
+          dest = String.format("%d($fp)", aboveFP);
+          break;
+        case Local:
+          aboveSP = (myFunc.stack.out + s.index)*4;
+          dest = String.format("%d($sp)", aboveSP);
+          break;
+        case Out:
+          aboveSP = (s.index)*4;
+          dest = String.format("%d($sp)", aboveSP);
+          break;
+        default:
+          compile("ERROR VMemWrite dest Stack region. It is: " + s.region);
+          System.exit(1);
+          break;
+      }
+    }
+
+    compile("sw " + src + " " + dest);
   }
 
   @Override
-  public void visit(VMemRead vMemRead) throws RuntimeException {
+  public void visit(VMemRead a) throws RuntimeException {
     compile("    TODO VMemRead TODO");
+    compile(a.toString());
   }
 
   @Override
-  public void visit(VBranch vBranch) throws RuntimeException {
-    compile("    TODO VBranch TODO");
+  public void visit(VBranch a) throws RuntimeException {
+    /*
+     if0 $t1 goto :if1_else
+     beqz $t1 if1_else
+
+     if $s2 goto :null21
+     bnez $s2 null21
+    */
+
+    String op = a.positive ? "bnez" : "beqz";
+
+    String val = null;
+    /* the value to determine the jump */
+    if (a.value instanceof VLitInt) {
+      val = ((VLitInt)a.value).toString();
+    } else if (a.value instanceof VVarRef.Register) {
+      val = ((VVarRef.Register)(a.value)).toString();
+    } else {
+      compile("ERROR VBranch not a LitInt or a VVarRef? what is is..." + a.value.getClass());
+      System.exit(1);
+    }
+
+    compile(op + " " + val + " " + a.target.toString().substring(1));
   }
 
   @Override
@@ -165,7 +245,9 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
   }
 
   @Override
-  public void visit(VReturn vReturn) throws RuntimeException {
-    compile("    TODO VReturn TODO");
+  public void visit(VReturn a) throws RuntimeException {
+    /* endFunction boilerplate manages the stack frame portion of the 'ret' call */
+    /* all we need to do is jump our instruction pointer to the return addr */
+    compile("jr $ra");
   }
 }
