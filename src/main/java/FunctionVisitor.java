@@ -33,7 +33,7 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
   private void compile_labels(int targetLine) {
     for (VCodeLabel l : myFunc.labels) {
       if (targetLine == l.sourcePos.line) {
-        compile(l.ident + ":");
+        System.out.println(l.ident + ":");
         compile_labels(targetLine + 1);
       }
     }
@@ -133,23 +133,14 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
       int ans =  (lhs * rhs); /* Java automatically truncates to 32 bits */
       compile("li " + a.dest + " " + ans);
     } else if (a.args[0] instanceof VLitInt) {
-      /* Place lhs LitInt into a register */
-      String reg = "$t9";
-      int lhs = ((VLitInt)(a.args[0])).value;
-      compile("li " + reg + " " + lhs);
-      compile("mult " + reg + " " + a.args[1]);
-    } else if (a.args[1] instanceof VLitInt) {
-      /* Place rhs LitInt into a register */
-      String reg = "$t9";
-      int rhs = ((VLitInt)(a.args[1])).value;
-      compile("li " + reg + " " + rhs);
-      compile("mult " + a.args[0] + " " + reg);
+      /* Reorder operations to make only the last one a LitInt */
+      compile("mul " + a.dest + " " + a.args[1] + " " + a.args[0]);
     } else {
-      compile("mult " + a.args[0] + " " + a.args[1]);
+      compile("mul " + a.dest + " " + a.args[0] + " " + a.args[1]);
     }
-    compile("mflo " + a.dest);
   }
 
+  /* TODO figure out what ACTUALLY goes here - not 'eq' */
   private void compile_Eq(VBuiltIn a) {
     if (a.args[0] instanceof VLitInt && a.args[1] instanceof VLitInt) {
       /*  optimize out the operation if both args are LitInts*/
@@ -287,8 +278,8 @@ public class FunctionVisitor extends VInstr.Visitor<RuntimeException> {
     else if (a.op == VBuiltIn.Op.Sub) compile_Sub(a);
     else if (a.op == VBuiltIn.Op.MulS) compile_MulS(a);
     else if (a.op == VBuiltIn.Op.Eq) compile_Eq(a);
-    else if (a.op == VBuiltIn.Op.Lt) compile_Lt(a, "");
-    else if (a.op == VBuiltIn.Op.LtS) compile_Lt(a,  "u");
+    else if (a.op == VBuiltIn.Op.Lt) compile_Lt(a, "u");
+    else if (a.op == VBuiltIn.Op.LtS) compile_Lt(a,  "");
     else if (a.op == VBuiltIn.Op.PrintIntS) compile_PrintIntS(a);
     else if (a.op == VBuiltIn.Op.HeapAllocZ) compile_HeapAllocZ(a);
     else if (a.op == VBuiltIn.Op.Error) compile_Error(a);

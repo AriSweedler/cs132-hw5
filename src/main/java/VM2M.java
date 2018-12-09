@@ -36,7 +36,7 @@ public class VM2M {
     }
 
     /* start the Main function */
-    System.out.println(".text");
+    System.out.println(".text\n");
     String s = "  jal Main\n" +
           "  li $v0 10\n" +
           "  syscall\n";
