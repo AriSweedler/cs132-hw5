@@ -70,8 +70,8 @@ public class VM2M {
           ".data\n" +
           ".align 0\n" +
           "_newline: .asciiz \"\\n\"\n" +
-          "_str0: .asciiz \"null pointer\\n\"\n" +
-          "_str1: .asciiz \"array index out of bounds\\n\"";
+          "_nullptr: .asciiz \"null pointer\\n\"\n" +
+          "_arriob: .asciiz \"array index out of bounds\\n\"";
     System.out.println(boilerplate);
   }
 
